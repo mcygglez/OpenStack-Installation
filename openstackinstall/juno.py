@@ -278,21 +278,46 @@ def install_keystone(databaseUserPassword, controlNodeIP, mySQLPassword):
   osicommon.log('Installing Keystone')
   osicommon.run_db_command(mySQLPassword, "CREATE DATABASE IF NOT EXISTS keystone CHARACTER SET utf8 COLLATE utf8_general_ci;")
   osicommon.run_db_command(mySQLPassword, "GRANT ALL ON keystone.* TO 'keystone'@'%' IDENTIFIED BY '" + databaseUserPassword + "';")
-  osicommon.run_command("apt-get install -y python-six python-babel keystone" , True)
+  ##commented
+  #osicommon.run_command("apt-get install -y python-six python-babel keystone" , True)
+  ##end commented
+  ##added (python-keystoneclient is allegedly a dependency of keystone, but i decided to install it explicitly)
+  osicommon.run_command("apt-get install -y python-six python-babel keystone python-keystoneclient", True)
+  ##end added
   osicommon.log('Configuring Keystone')
   osicommon.delete_file('/var/lib/keystone/keystone.db')
   keystoneConf = '/etc/keystone/keystone.conf'
-  osicommon.set_config_ini(keystoneConf, 'DEFAULT', 'admin_token', 'ADMINTOKEN')
+  ##added
+  random_admin_token = osicommon.run_command("openssl rand -hex 10")
+  ##end added
+  ##commented
+  # osicommon.set_config_ini(keystoneConf, 'DEFAULT', 'admin_token', 'ADMINTOKEN')
+  ##end commented
+  ##added
+  osicommon.set_config_ini(keystoneConf, 'DEFAULT', 'admin_token', random_admin_token)
+  ##end added
   osicommon.set_config_ini(keystoneConf, 'DEFAULT', 'admin_port', 35357)
   osicommon.set_config_ini(keystoneConf, 'DEFAULT', 'log_dir', '/var/log/keystone')
   osicommon.set_config_ini(keystoneConf, 'database', 'connection', "mysql://keystone:%s@%s/keystone" %(databaseUserPassword,controlNodeIP))
   osicommon.set_config_ini(keystoneConf, 'signing', 'token_format', 'UUID')
+  ##added
+  osicommon.set_config_ini(keystoneConf, 'token', 'provider', 'keystone.token.providers.uuid.Provider')
+  osicommon.set_config_ini(keystoneConf, 'token', 'driver', 'keystone.token.persistence.backends.sql.Token')
+  ##end added
   osicommon.run_command("service keystone restart" , True)
   time.sleep(10)
   osicommon.run_command("keystone-manage db_sync" , True)
+  ##added
+  osicommon.run_command("(crontab -l -u keystone 2>&1 | grep -q token_flush) || echo '@hourly /usr/bin/keystone-manage token_flush >/var/log/keystone/keystone-tokenflush.log 2>&1' >> /var/spool/cron/crontabs/keystone")
+  ##end added
 
   # Configure users/endpoints/etc
-  os.environ['SERVICE_TOKEN'] = 'ADMINTOKEN'
+  ##commented
+  #os.environ['SERVICE_TOKEN'] = 'ADMINTOKEN'
+  ##end commented
+  ##added
+  os.environ['SERVICE_TOKEN'] = random_admin_token
+  ##end added
   os.environ['SERVICE_ENDPOINT'] = 'http://%s:35357/v2.0'% controlNodeIP
   os.environ['no_proxy'] = "localhost,127.0.0.1,%s" % controlNodeIP
 
